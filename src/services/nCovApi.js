@@ -8,3 +8,15 @@ export function getNcovData() {
     });
   return data;
 }
+const appid = '47979915';
+const appsecret = '2M30Vpxx';
+export function getNcovOtherData() {
+  const data = fetch(`https://tianqiapi.com/api?version=epidemic&appid=${appid}&appsecret=${appsecret}&vue=1`)
+    .then(res => res.json())
+    .then(res => {
+      console.log(res.data.history);
+
+      return res.data;
+    });
+  return data;
+}
