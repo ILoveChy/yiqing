@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import { getNcovData } from './services/nCovApi';
+import { getNcovData, getNcovOtherData } from './services/nCovApi';
 import './App.css';
 import { Typography, Statistic, Card, Row, Col, List, Tabs, Icon, Table } from 'antd';
 import G2 from '@antv/g2';
@@ -15,6 +15,8 @@ const IconText = ({ type, text }) => (
 export default class App extends Component {
   state = {
     data: {},
+    otherData: {},
+    current: 1,
   };
   componentDidMount() {
     getNcovData().then(res => {
@@ -22,44 +24,173 @@ export default class App extends Component {
         data: { ...this.state.data, ...res },
       });
     });
-    this.g2Render();
+    getNcovOtherData().then(res => {
+      this.setState({
+        otherData: { ...this.state.otherData, ...res },
+      });
+      this.g2Render();
+    });
   }
+  expandedRowRender = (record, index) => {
+    const columns = [
+      { title: '城市', dataIndex: 'cityName', key: 'cityName' },
+      { title: '累计确诊', dataIndex: 'confirmedCount', key: 'confirmedCount' },
+      { title: '累计治愈', dataIndex: 'curedCount', key: 'curedCount' },
+      { title: '累计死亡', dataIndex: 'deadCount', key: 'deadCount' },
+    ];
+    index = parseInt(this.state.current - 1) * 10 + index;
+    const data = this.state.otherData.area[index].cities ? this.state.otherData.area[index].cities : null;
+    return <Table key={record.locationId} columns={columns} dataSource={data} pagination={false} />;
+  };
+  handleChange = pagination => {
+    this.setState({
+      current: pagination.current,
+    });
+  };
   g2Render = () => {
     const chart = new G2.Chart({
       container: 'c1',
       width: 600,
       forceFit: true,
-      height: 300,
+      height: 600,
     });
-    const c1Data = [
-      { year: '2月1日', value: 100 },
-      { year: '2月2日', value: 115 },
-      { year: '2月3日', value: 120 },
-      { year: '2月4日', value: 152 },
-      { year: '2月5日', value: 177 },
-    ];
-    chart.source(c1Data);
-    chart.scale('value', {
-      min: 0,
+
+    const c1Data = this.state.otherData.history;
+
+    chart.source(c1Data, {
+      confirmedNum: {
+        min: 0,
+        tickInterval: 50000,
+        alias: '累计确诊',
+      },
+      curesNum: {
+        min: 0,
+        tickInterval: 5000,
+        alias: '累计治愈',
+      },
+      deathsNum: {
+        min: 0,
+        tickInterval: 5000,
+        alias: '累计死亡',
+      },
     });
-    chart.scale('year', {
-      range: [0.2, 0.8],
+    chart.axis('confirmedNum', {
+      title: {
+        textStyle: {
+          fontSize: 12, // 文本大小
+          textAlign: 'center', // 文本对齐方式
+          fill: '#999', // 文本颜色
+          // ...
+        },
+      },
+      label: {
+        formatter: val => {
+          return val; // 格式化坐标轴显示
+        },
+        textStyle: {
+          fill: '#95ceff',
+        },
+      },
+      line: {
+        lineWidth: 2, // 设置线的宽度
+        stroke: '#95ceff', // 设置线的颜色
+      },
+      tickLine: null,
     });
+    // 右侧第一个 Y 轴，即温度轴
+    chart.axis('curesNum', {
+      line: {
+        lineWidth: 2, // 设置线的宽度
+        stroke: '#10aeb5', // 设置线的颜色
+      },
+      tickLine: null,
+
+      label: {
+        formatter: val => {
+          return val; // 格式化坐标轴显示
+        },
+        textStyle: {
+          fill: '#10aeb5',
+          fontSize: 12,
+          textAlign: 'end',
+          textBaseline: 'bottom',
+        },
+      },
+    });
+    // 右侧第二个 Y 轴，即海平面气压轴
+    chart.axis('deathsNum', {
+      line: null,
+      tickLine: null,
+      label: {
+        formatter: val => {
+          return val; // 格式化坐标轴显示
+        },
+        offset: -1,
+        textStyle: {
+          fill: '#333',
+        },
+      },
+    });
+
     chart.tooltip({
       crosshairs: {
         type: 'line',
       },
     });
-    chart.line().position('year*value');
+    chart.scale('confirmedNum', {
+      tickCount: 10,
+      alias: '累计确诊',
+    });
+    chart.scale('date', {
+      range: [0.1, 0.9],
+    });
+    chart
+      .line()
+      .size(2)
+      .position('date*confirmedNum')
+      .color('#95ceff'); // 确诊
+
+    chart
+      .line()
+      .position('date*curesNum')
+      .color('#10aeb5')
+      .size(2)
+      .shape('smooth'); // 治愈
+    chart
+      .line()
+      .position('date*deathsNum')
+      .shape('smooth')
+      .size(2)
+      .color('#4d5054'); //死亡
     chart
       .point()
-      .position('year*value')
-      .size(4)
+      .position('date*confirmedNum')
+      .size(3)
       .shape('circle')
+      // .label('confirmedNum')
       .style({
-        stroke: '#f40',
+        stroke: '#95ceff',
         lineWidth: 1,
       });
+    chart
+      .point()
+      .position('date*curesNum')
+      .size(3)
+      .shape('circle')
+      .style({
+        stroke: '#10aeb5',
+        lineWidth: 1,
+      });
+    chart
+      .point()
+      .position('date*deathsNum')
+      .size(3)
+      .shape('circle')
+      .style({
+        stroke: '#4d5054',
+        lineWidth: 1,
+      });
+
     chart.render();
   };
   render() {
@@ -73,19 +204,16 @@ export default class App extends Component {
         title: '累计确诊',
         dataIndex: 'confirmedCount',
         key: 'confirmedCount',
-        sorter: (a, b) => a.confirmedCount - b.confirmedCount,
       },
       {
         title: '累计治愈',
         dataIndex: 'curedCount',
         key: 'curedCount',
-        sorter: (a, b) => a.curedCount - b.curedCount,
       },
       {
         title: '累计死亡',
         dataIndex: 'deadCount',
         key: 'deadCount',
-        sorter: (a, b) => a.deadCount - b.deadCount,
       },
     ];
     return (
@@ -226,9 +354,12 @@ export default class App extends Component {
             >
               <Table
                 scroll={{ scrollToFirstRowOnChange: true }}
-                rowKey='id'
-                dataSource={this.state.data.case}
+                rowKey='locationId'
+                dataSource={this.state.otherData.area}
+                expandedRowRender={this.expandedRowRender}
                 columns={columns}
+                expandRowByClick
+                onChange={this.handleChange}
               />
             </TabPane>
             <TabPane
@@ -259,7 +390,11 @@ export default class App extends Component {
                       <IconText type='message' text='2' key='list-vertical-message' />,
                     ]}
                   >
-                    <List.Item.Meta title={<a href={item.sourceUrl}>{`${item.provinceName}#${item.title}#`}</a>} />
+                    <List.Item.Meta
+                      title={
+                        <a href={item.sourceUrl}>{`${item.provinceName ? item.provinceName : ''}#${item.title}#`}</a>
+                      }
+                    />
                     {item.summary}
                   </List.Item>
                 )}
